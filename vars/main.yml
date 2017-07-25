@@ -1,0 +1,485 @@
+---
+default_interface: eth0
+
+tftp_port: 69
+tftp_boot_dir: "/var/lib/tftpboot"
+tftp_server: "localhost"  # IP address, or domain name of the TFTP server
+tftp_ssh_key: ""  # user defined ssh key, used to access the host
+
+mnaio_host_networks:
+  dhcp:
+    iface: 'vm-br-dhcp'                 # str  - required, interface name
+    inet_type: 'dhcp'                   # str  - required, iface type [static, dhcp, manual]
+    iface_port: none                    # str  - required, physical port used within a host bridge
+  mgmt:
+    iface: 'vm-br-eth1'
+    inet_type: 'static'
+    address: '10.0.236.100/22'          # str  - not required, must be in CIDR format
+    iface_port: none
+  flat:
+    iface: 'vm-br-eth2'
+    inet_type: 'static'
+    address: '10.0.248.100/22'
+    iface_port: none
+  vlan:
+    iface: 'vm-br-eth3'
+    inet_type: 'manual'
+    iface_port: none
+  vxlan:
+    iface: 'vm-br-eth4'
+    inet_type: 'manual'
+    address: '10.0.240.100/22'
+    iface_port: none
+  storage:
+    iface: 'vm-br-eth5'
+    inet_type: 'manual'
+    address: '10.0.244.100/22'
+    iface_port: none
+
+mnaio_host_iptables_rules:
+  - table: filter
+    chain: INPUT
+    protocol: tcp
+    match: tcp
+    destination_port: 67
+    jump: ACCEPT
+  - table: filter
+    chain: INPUT
+    protocol: udp
+    match: udp
+    destination_port: 67
+    jump: ACCEPT
+  - table: filter
+    chain: INPUT
+    protocol: udp
+    match: udp
+    destination_port: 53
+    jump: ACCEPT
+  - table: filter
+    chain: INPUT
+    protocol: udp
+    match: udp
+    destination_port: 53
+    jump: ACCEPT
+  - table: filter
+    chain: FORWARD
+    in_interface: br-dhcp
+    jump: ACCEPT
+  - table: filter
+    chain: FORWARD
+    out_interface: br-dhcp
+    jump: ACCEPT
+  - table: nat
+    chain: POSTROUTING
+    source: "10.0.0.0/24"
+    destination: "!10.0.0.0/24"
+    jump: MASQUERADE
+  - table: nat
+    chain: POSTROUTING
+    out_interface: "{{ default_interface }}"
+    jump: MASQUERADE
+  - table: mangle
+    chain: POSTROUTING
+    source: "10.0.0.0/24"
+    out_interface: "br-dhcp"
+    protocol: udp
+    match: udp
+    destination_port: 68
+    jump: CHECKSUM
+  - table: mangle
+    chain: POSTROUTING
+    protocol: tcp
+    jump: CHECKSUM
+
+
+# Default ISO images
+images:
+  ubuntu-16.04-amd64:
+    image_type: debian
+    image_iso_url: "http://releases.ubuntu.com/16.04.2/ubuntu-16.04.2-server-amd64.iso"
+    image_name: "{{ image_iso_url | basename }}"
+    image_short_name: "{{ image_name.split('.iso', -1)[0] }}"
+    image_default_boot: "{{ image_short_name }}/amd64/boot-screens/menu.cfg"
+    image_kernel_options: "biosdevname=0 net.ifnames=0 auto=true priority=critical vga=789"
+    image_kernel: "{{ image_short_name }}/amd64/linux"
+    image_initrd: "{{ image_short_name }}/amd64/initrd.gz"
+    image_preseeds:
+      mnaio:
+        url: "tftp://{{ tftp_server }}/preseed/mnaio-preseed.cfg"
+        template_name: "mnaio.preseed"
+      vm:
+        url: "tftp://{{ tftp_server }}/preseed/vm-preseed.cfg"
+        template_name: "vm.preseed"
+
+# List of servers to create specific mac address bound boot entries.
+servers:
+  - server_hostname: 'infra1'              # str  - required, hostname of server
+    server_vm_ram: 4096                     # int  - not required, used to specify ram when provisioning a VM
+    server_vm_vcpus: 4                      # int  - not required, used to specify vcpus when provisioning a VM
+    server_image: 'ubuntu-16.04-amd64'      # str  - required, image name
+    server_default_interface: 'eth0'        # str  - required, default interface
+    server_mac_address: '52:54:00:bd:80:00' # str  - required, mac address of default interface
+    server_preseed_ks: 'vm'                 # str  - required, name of preseed/kickstart file
+    server_extra_options: ''                # str  - not required, added kernel options
+    server_networks:                        # dict - required, hash of networks, can be empty, key is used to name the networks.
+      dhcp:
+        iface: 'eth0'                       # str  - required, interface name
+        inet_type: 'dhcp'                   # str  - required, iface type [static, dhcp, manual]
+        vm_int_iface: vm-br-dhcp            # str  - not Required, used to specify an integration networks interface when provisioning a VM
+      mgmt:
+        iface: 'eth1'                       # str  - required, interface name
+        inet_type: 'static'                 # str  - required, iface type [static, dhcp, manual]
+        address: '10.0.236.100/22'          # str  - not required, must be in CIDR format
+        vm_int_iface: vm-br-eth1            # str  - not Required, used to specify an integration networks interface when provisioning a VM
+      flat:
+        iface: 'eth2'                       # str  - required, interface name
+        inet_type: 'static'                 # str  - required, iface type [static, dhcp, manual]
+        address: '10.0.248.100/22'          # str  - not required, must be in CIDR format
+        vm_int_iface: vm-br-eth2            # str  - not Required, used to specify an integration networks interface when provisioning a VM
+      vlan:
+        iface: 'eth3'                       # str  - required, interface name
+        inet_type: 'manual'                 # str  - required, iface type [static, dhcp, manual]
+        vm_int_iface: vm-br-eth3            # str  - not Required, used to specify an integration networks interface when provisioning a VM
+      vxlan:
+        iface: 'eth4'                       # str  - required, interface name
+        inet_type: 'manual'                 # str  - required, iface type [static, dhcp, manual]
+        address: '10.0.240.100/22'          # str  - not required, must be in CIDR format
+        vm_int_iface: vm-br-eth4            # str  - not Required, used to specify an integration networks interface when provisioning a VM
+      storage:
+        iface: 'eth5'                       # str  - required, interface name
+        inet_type: 'manual'                 # str  - required, iface type [static, dhcp, manual]
+        address: '10.0.244.100/22'          # str  - not required, must be in CIDR format
+        vm_int_iface: vm-br-eth5            # str  - not Required, used to specify an integration networks interface when provisioning a VM
+  - server_hostname: 'infra2'
+    server_vm_ram: 4096
+    server_vm_vcpus: 4
+    server_image: 'ubuntu-16.04-amd64'
+    server_default_interface: 'eth0'
+    server_mac_address: '52:54:00:bd:80:01'
+    server_preseed_ks: 'vm'
+    server_extra_options: ''
+    server_networks:
+      dhcp:
+        iface: 'eth0'
+        inet_type: 'dhcp'
+        vm_int_iface: vm-br-dhcp
+      mgmt:
+        iface: 'eth1'
+        inet_type: 'static'
+        address: '10.0.236.101/22'
+        vm_int_iface: vm-br-eth1
+      flat:
+        iface: 'eth2'
+        inet_type: 'static'
+        address: '10.0.248.101/22'
+        vm_int_iface: vm-br-eth2
+      vlan:
+        iface: 'eth3'
+        inet_type: 'manual'
+        vm_int_iface: vm-br-eth3
+      vxlan:
+        iface: 'eth4'
+        inet_type: 'manual'
+        address: '10.0.240.101/22'
+        vm_int_iface: vm-br-eth4
+      storage:
+        iface: 'eth5'
+        inet_type: 'manual'
+        address: '10.0.244.101/22'
+        vm_int_iface: vm-br-eth5
+  - server_hostname: 'infra3'
+    server_vm_ram: 4096
+    server_vm_vcpus: 4
+    server_image: 'ubuntu-16.04-amd64'
+    server_default_interface: 'eth0'
+    server_mac_address: '52:54:00:bd:80:02'
+    server_preseed_ks: 'vm'
+    server_extra_options: ''
+    server_networks:
+      dhcp:
+        iface: 'eth0'
+        inet_type: 'dhcp'
+        vm_int_iface: vm-br-dhcp
+      mgmt:
+        iface: 'eth1'
+        inet_type: 'static'
+        address: '10.0.236.102/22'
+        vm_int_iface: vm-br-eth1
+      flat:
+        iface: 'eth2'
+        inet_type: 'static'
+        address: '10.0.248.102/22'
+        vm_int_iface: vm-br-eth2
+      vlan:
+        iface: 'eth3'
+        inet_type: 'manual'
+        vm_int_iface: vm-br-eth3
+      vxlan:
+        iface: 'eth4'
+        inet_type: 'manual'
+        address: '10.0.240.102/22'
+        vm_int_iface: vm-br-eth4
+      storage:
+        iface: 'eth5'
+        inet_type: 'manual'
+        address: '10.0.244.102/22'
+        vm_int_iface: vm-br-eth5
+  - server_hostname: 'network1'
+    server_vm_ram: 2048
+    server_vm_vcpus: 1
+    server_image: 'ubuntu-16.04-amd64'
+    server_default_interface: 'eth0'
+    server_mac_address: '52:54:00:bd:80:03'
+    server_preseed_ks: 'vm'
+    server_extra_options: ''
+    server_networks:
+      dhcp:
+        iface: 'eth0'
+        inet_type: 'dhcp'
+        vm_int_iface: vm-br-dhcp
+      mgmt:
+        iface: 'eth1'
+        inet_type: 'static'
+        address: '10.0.236.103/22'
+        vm_int_iface: vm-br-eth1
+      flat:
+        iface: 'eth2'
+        inet_type: 'static'
+        address: '10.0.248.103/22'
+        vm_int_iface: vm-br-eth2
+      vlan:
+        iface: 'eth3'
+        inet_type: 'manual'
+        vm_int_iface: vm-br-eth3
+      vxlan:
+        iface: 'eth4'
+        inet_type: 'manual'
+        address: '10.0.240.103/22'
+        vm_int_iface: vm-br-eth4
+      storage:
+        iface: 'eth5'
+        inet_type: 'manual'
+        address: '10.0.244.103/22'
+        vm_int_iface: vm-br-eth5
+  - server_hostname: 'network2'
+    server_vm_ram: 2048
+    server_vm_vcpus: 1
+    server_image: 'ubuntu-16.04-amd64'
+    server_default_interface: 'eth0'
+    server_mac_address: '52:54:00:bd:80:04'
+    server_preseed_ks: 'vm'
+    server_extra_options: ''
+    server_networks:
+      dhcp:
+        iface: 'eth0'
+        inet_type: 'dhcp'
+        vm_int_iface: vm-br-dhcp
+      mgmt:
+        iface: 'eth1'
+        inet_type: 'static'
+        address: '10.0.236.104/22'
+        vm_int_iface: vm-br-eth1
+      flat:
+        iface: 'eth2'
+        inet_type: 'static'
+        address: '10.0.248.104/22'
+        vm_int_iface: vm-br-eth2
+      vlan:
+        iface: 'eth3'
+        inet_type: 'manual'
+        vm_int_iface: vm-br-eth3
+      vxlan:
+        iface: 'eth4'
+        inet_type: 'manual'
+        address: '10.0.240.104/22'
+        vm_int_iface: vm-br-eth4
+      storage:
+        iface: 'eth5'
+        inet_type: 'manual'
+        address: '10.0.244.104/22'
+        vm_int_iface: vm-br-eth5
+  - server_hostname: 'compute1'
+    server_vm_ram: 2048
+    server_vm_vcpus: 4
+    server_image: 'ubuntu-16.04-amd64'
+    server_default_interface: 'eth0'
+    server_mac_address: '52:54:00:bd:80:05'
+    server_preseed_ks: 'vm'
+    server_extra_options: ''
+    server_networks:
+      dhcp:
+        iface: 'eth0'
+        inet_type: 'dhcp'
+        vm_int_iface: vm-br-dhcp
+      mgmt:
+        iface: 'eth1'
+        inet_type: 'static'
+        address: '10.0.236.105/22'
+        vm_int_iface: vm-br-eth1
+      flat:
+        iface: 'eth2'
+        inet_type: 'static'
+        address: '10.0.248.105/22'
+        vm_int_iface: vm-br-eth2
+      vlan:
+        iface: 'eth3'
+        inet_type: 'manual'
+        vm_int_iface: vm-br-eth3
+      vxlan:
+        iface: 'eth4'
+        inet_type: 'manual'
+        address: '10.0.240.105/22'
+        vm_int_iface: vm-br-eth4
+      storage:
+        iface: 'eth5'
+        inet_type: 'manual'
+        address: '10.0.244.105/22'
+        vm_int_iface: vm-br-eth5
+  - server_hostname: 'compute2'
+    server_vm_ram: 2048
+    server_vm_vcpus: 4
+    server_image: 'ubuntu-16.04-amd64'
+    server_default_interface: 'eth0'
+    server_mac_address: '52:54:00:bd:80:06'
+    server_preseed_ks: 'vm'
+    server_extra_options: ''
+    server_networks:
+      dhcp:
+        iface: 'eth0'
+        inet_type: 'dhcp'
+        vm_int_iface: vm-br-dhcp
+      mgmt:
+        iface: 'eth1'
+        inet_type: 'static'
+        address: '10.0.236.106/22'
+        vm_int_iface: vm-br-eth1
+      flat:
+        iface: 'eth2'
+        inet_type: 'static'
+        address: '10.0.248.106/22'
+        vm_int_iface: vm-br-eth2
+      vlan:
+        iface: 'eth3'
+        inet_type: 'manual'
+        vm_int_iface: vm-br-eth3
+      vxlan:
+        iface: 'eth4'
+        inet_type: 'manual'
+        address: '10.0.240.106/22'
+        vm_int_iface: vm-br-eth4
+      storage:
+        iface: 'eth5'
+        inet_type: 'manual'
+        address: '10.0.244.106/22'
+        vm_int_iface: vm-br-eth5
+  - server_hostname: 'storage1'
+    server_vm_ram: 2048
+    server_vm_vcpus: 1
+    server_image: 'ubuntu-16.04-amd64'
+    server_default_interface: 'eth0'
+    server_mac_address: '52:54:00:bd:80:07'
+    server_preseed_ks: 'vm'
+    server_extra_options: ''
+    server_networks:
+      dhcp:
+        iface: 'eth0'
+        inet_type: 'dhcp'
+        vm_int_iface: vm-br-dhcp
+      mgmt:
+        iface: 'eth1'
+        inet_type: 'static'
+        address: '10.0.236.107/22'
+        vm_int_iface: vm-br-eth1
+      flat:
+        iface: 'eth2'
+        inet_type: 'static'
+        address: '10.0.248.107/22'
+        vm_int_iface: vm-br-eth2
+      vlan:
+        iface: 'eth3'
+        inet_type: 'manual'
+        vm_int_iface: vm-br-eth3
+      vxlan:
+        iface: 'eth4'
+        inet_type: 'manual'
+        address: '10.0.240.107/22'
+        vm_int_iface: vm-br-eth4
+      storage:
+        iface: 'eth5'
+        inet_type: 'manual'
+        address: '10.0.244.107/22'
+        vm_int_iface: vm-br-eth5
+  - server_hostname: 'storage2'
+    server_vm_ram: 2048
+    server_vm_vcpus: 1
+    server_image: 'ubuntu-16.04-amd64'
+    server_default_interface: 'eth0'
+    server_mac_address: '52:54:00:bd:80:08'
+    server_preseed_ks: 'vm'
+    server_extra_options: ''
+    server_networks:
+      dhcp:
+        iface: 'eth0'
+        inet_type: 'dhcp'
+        vm_int_iface: vm-br-dhcp
+      mgmt:
+        iface: 'eth1'
+        inet_type: 'static'
+        address: '10.0.236.108/22'
+        vm_int_iface: vm-br-eth1
+      flat:
+        iface: 'eth2'
+        inet_type: 'static'
+        address: '10.0.248.108/22'
+        vm_int_iface: vm-br-eth2
+      vlan:
+        iface: 'eth3'
+        inet_type: 'manual'
+        vm_int_iface: vm-br-eth3
+      vxlan:
+        iface: 'eth4'
+        inet_type: 'manual'
+        address: '10.0.240.108/22'
+        vm_int_iface: vm-br-eth4
+      storage:
+        iface: 'eth5'
+        inet_type: 'manual'
+        address: '10.0.244.108/22'
+        vm_int_iface: vm-br-eth5
+  - server_hostname: 'deploy1'
+    server_vm_ram: 1024
+    server_vm_vcpus: 2
+    server_image: 'ubuntu-16.04-amd64'
+    server_default_interface: 'eth0'
+    server_mac_address: '52:54:00:bd:80:09'
+    server_preseed_ks: 'vm'
+    server_extra_options: ''
+    server_networks:
+      dhcp:
+        iface: 'eth0'
+        inet_type: 'dhcp'
+        vm_int_iface: vm-br-dhcp
+      mgmt:
+        iface: 'eth1'
+        inet_type: 'static'
+        address: '10.0.236.109/22'
+        vm_int_iface: vm-br-eth1
+      flat:
+        iface: 'eth2'
+        inet_type: 'static'
+        address: '10.0.248.109/22'
+        vm_int_iface: vm-br-eth2
+      vlan:
+        iface: 'eth3'
+        inet_type: 'manual'
+        vm_int_iface: vm-br-eth3
+      vxlan:
+        iface: 'eth4'
+        inet_type: 'manual'
+        address: '10.0.240.109/22'
+        vm_int_iface: vm-br-eth4
+      storage:
+        iface: 'eth5'
+        inet_type: 'manual'
+        address: '10.0.244.109/22'
+        vm_int_iface: vm-br-eth5

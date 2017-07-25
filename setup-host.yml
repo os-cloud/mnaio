@@ -1,0 +1,89 @@
+---
+# Copyright 2017, Rackspace US, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in witing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Gather facts
+  hosts: localhost
+  gather_facts: "{{ gather_facts | default(true) }}"
+  pre_tasks:
+    - name: Gather variables for each operating system
+      include_vars: "{{ item }}"
+      with_first_found:
+        - "vars/{{ ansible_distribution | lower }}-{{ ansible_distribution_version | lower }}.yml"
+        - "vars/{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
+        - "vars/{{ ansible_os_family | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
+        - "vars/{{ ansible_distribution | lower }}.yml"
+        - "vars/{{ ansible_os_family | lower }}.yml"
+      tags:
+        - always
+
+    - name: Install host distro packages
+      package:
+        pkg: "{{ item }}"
+        state: "latest"
+        update_cache: yes
+        cache_valid_time: 600
+      with_items: "{{ mnaio_host_distro_packages }}"
+
+  tasks:
+    - name: Add sysctl options
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        sysctl_set: yes
+        state: present
+        reload: yes
+        sysctl_file: /etc/sysctl.conf
+
+    - name: Add IPtables rules
+      iptables:
+        table: "{{ item.table | default(omit) }}"
+        chain: "{{ item.chain | default(omit) }}"
+        in_interface: "{{ item.in_interface | default(omit) }}"
+        out_interface: "{{ item.out_interface | default(omit) }}"
+        source: "{{ item.source | default(omit) }}"
+        destination: "{{ item.destination | default(omit) }}"
+        protocol: "{{ item.protocol | default(omit) }}"
+        match: "{{ item.match | default(omit) }}"
+        destination_port: "{{ item.destination_port | default(omit) }}"
+        jump: "{{ item.jump | default(omit) }}"
+        to_ports: "{{ item.to_ports | default(omit) }}"
+      with_items: "{{ mnaio_host_iptables_rules }}"
+
+    # These rules are added manually due to bugs in the iptables module.
+    - name: Add IPtables rules
+      shell: |
+        if ! iptables -w -t {{ table }} -C {{ rule }};then
+          iptables -w -t {{ table }} -I {{ rule }}
+        fi
+      with_items:
+        - table: 'nat'
+          rule: 'POSTROUTING -s 10.0.0.0/24 ! -d 10.0.0.0/24 -j MASQUERADE'
+        - table: 'mangle'
+          rule: 'POSTROUTING -s 10.0.0.0/24 -o br-dhcp -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill'
+        - table: 'nat'
+          rule: 'POSTROUTING -s 10.0.0.0/24 -o br-dhcp -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill'
+
+    - name: Start netfilter persistent
+      service:
+        name: netfilter-persistent
+        state: started
+        enabled: yes
+      when:
+        - maas_use_api | bool
+
+  vars_files:
+    - vars/main.yml
+  tags:
+    - setup-host

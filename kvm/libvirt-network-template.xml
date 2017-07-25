@@ -1,0 +1,5 @@
+<network>
+  <name>{{ item.host_network }}</name>
+  <forward mode="bridge"/>
+  <bridge name="{{ item.host_network }}"/>
+</network>
