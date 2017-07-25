@@ -1,0 +1,12 @@
+[all]
+localhost ansible_connection=local
+mnaio1 ansible_host=10.0.2.1
+
+[pxe_hosts]
+mnaio1
+
+[dhcp_hosts]
+mnaio1
+
+[vm_hosts]
+mnaio1
