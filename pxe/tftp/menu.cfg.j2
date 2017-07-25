@@ -9,7 +9,7 @@ label local
     LOCALBOOT 0
 
 {% for key, value in images.items() %}
-{%   for _key, _value in value.preseeds.items() %}
+{%   for _key, _value in value.image_preseeds.items() %}
 label {{ key }} {{ _key }}
     menu {{ key }} {{ _key }} automated install
     kernel {{ value.image_kernel }}

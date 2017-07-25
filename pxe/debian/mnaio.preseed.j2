@@ -1,4 +1,4 @@
-# Ubuntu Server 16.04 Preseed
+# Ubuntu Server Preseed
 # Kernel Options
 
 # Use the following option to add additional boot parameters for the
@@ -9,8 +9,8 @@ d-i debian-installer/add-kernel-opts string biosdevname=0 net.ifnames=0
 # Networking
 d-i netcfg/choose_interface select eth0
 d-i netcfg/dhcp_timeout string 60
-d-i netcfg/get_hostname string common1
-d-i netcfg/get_domain string common1.openstackci.local
+d-i netcfg/get_hostname string host1
+d-i netcfg/get_domain string host1.openstack.local
 
 ## USE THIS FOR STATIC NETWORKING
 # d-i netcfg/disable_autoconfig boolean true
@@ -37,7 +37,7 @@ d-i preseed/early_command string \
 # Net Image
 
 # Required at least for 12.10+
-d-i live-installer/net-image string {{ tftp_server }}/images/{{ item.image_short_name }}/install/filesystem.squashfs
+d-i live-installer/net-image string {{ tftp_server }}/images/{{ item.value.image_short_name }}/install/filesystem.squashfs
 
 # Localization
 
@@ -89,54 +89,66 @@ d-i partman-md/device_remove_md boolean true
 # And the same goes for the confirmation to write the lvm partitions.
 d-i partman-lvm/confirm boolean true
 d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman-md/confirm boolean true
+d-i partman-md/confirm_nooverwrite boolean true
 
-d-i partman-auto/method string lvm
-d-i partman-auto/disk string /dev/[sv]da
+d-i partman-basicfilesystems/choose_label string gpt
+d-i partman-basicfilesystems/default_label string gpt
+d-i partman-partitioning/choose_label string gpt
+d-i partman-partitioning/default_label string gpt
+d-i partman/choose_label string gpt
+d-i partman/default_label string gpt
+
+d-i partman-auto/method string raid
+d-i partman-auto/disk string /dev/[sv]da /dev/[sv]db
 
 # For LVM partitioning, you can select how much of the volume group to use
 # for logical volumes.
 d-i partman-auto-lvm/guided_size string max
+d-i partman-auto-lvm/new_vg_name string vg00
 
 d-i partman-auto/choose_recipe select custompartitioning
+
 d-i partman-auto/expert_recipe string \
       custompartitioning :: \
-              512 1 512 ext2                          \
+              1 1 1 free                              \
+                      $gptonly{ }                    \
+                      $primary{ }                    \
+                      $bios_boot{ }                  \
+                      method{ biosgrub }              \
+              .                                       \
+              256 1 512 raid                          \
+                      $gptonly{ }                    \
+                      $lvmignore{ }                  \
                       $primary{ }                    \
                       $bootable{ }                   \
-                      method{ format }                \
-                      format{ }                       \
-                      use_filesystem{ }               \
-                      filesystem{ ext2 }              \
-                      label{ boot }                   \
-                      mountpoint{ /boot }             \
+                      method{ raid }                  \
+                      raidid{ 1 }                     \
               .                                       \
-              1024 1 100% ext4                        \
-                      $primary{ }                    \
-                      method{ lvm }                   \
-                      vg_name{ vg00 }                 \
+              204800 1 -1 raid                        \
+                      $gptonly{ }                    \
+                      $lvmignore{ }                  \
+                      method{ raid }                  \
+                      raidid{ 2 }                     \
               .                                       \
-              1024 512 800% linux-swap                \
+              1024 512 400% linux-swap                \
+                      $defaultignore{ }              \
                       $lvmok{ }                      \
-                      in_vg{ vg00 }                   \
-                      lv_name{ swap00 }               \
                       method{ swap }                  \
-                      label{ swap }                   \
                       format{ }                       \
               .                                       \
               16384 5000 100% ext4                    \
+                      $defaultignore{ }              \
                       $lvmok{ }                      \
-                      in_vg{ vg00 }                   \
-                      lv_name{ root00 }               \
                       method{ format }                \
                       format{ }                       \
                       use_filesystem{ }               \
                       filesystem{ ext4 }              \
-                      label{ root }                   \
                       mountpoint{ / }                 \
               .                                       \
               81920 1000 100% ext4                    \
+                      $defaultignore{ }              \
                       $lvmok{ }                      \
-                      in_vg{ vg00 }                   \
                       lv_name{ openstack00 }          \
                       method{ format }                \
                       format{ }                       \
@@ -146,8 +158,8 @@ d-i partman-auto/expert_recipe string \
                       mountpoint{ /openstack }        \
               .                                       \
               81920 1000 100% btrfs                   \
+                      $defaultignore{ }              \
                       $lvmok{ }                      \
-                      in_vg{ vg00 }                   \
                       lv_name{ machines00 }           \
                       method{ format }                \
                       format{ }                       \
@@ -156,6 +168,14 @@ d-i partman-auto/expert_recipe string \
                       label{ machines }               \
                       mountpoint{ /var/lib/machines } \
               .                                       \
+
+d-i partman-auto-raid/recipe string \
+    0 2 0 ext2 /boot raidid=1       \
+        /dev/[sv]da1#/dev/[sv]db1   \
+    .                               \
+    0 2 0 lvm - raidid=2            \
+        /dev/[sv]da5#/dev/[sv]db5   \
+    .                               \
 
 # This makes partman automatically partition without confirmation, provided
 # that you told it what to do using one of the methods above.
@@ -171,19 +191,25 @@ tasksel tasksel/first multiselect openssh-server
 
 # Whether to upgrade packages after debootstrap.
 # Allowed values: none, safe-upgrade, full-upgrade
-d-i pkgsel/upgrade select none
+d-i pkgsel/upgrade select full-upgrade
 d-i pkgsel/include string bridge-utils      \
                           dstat             \
                           ethtool           \
                           git               \
                           htop              \
                           ifenslave         \
+                          libvirt-bin       \
                           lvm2              \
                           openssh-server    \
                           parted            \
+                          python3-all       \
                           python-all        \
+                          qemu-kvm          \
+                          systemd-container \
                           tmux              \
                           vim               \
+                          virt-manager      \
+                          virtinst          \
                           vlan
 
 d-i pkgsel/update-policy select none
@@ -221,9 +247,9 @@ d-i grub-installer/only_debian boolean true
 # Post Install
 
 d-i preseed/late_command string \
-  in-target bash -c "wget {{ tftp_server }}/scripts/vm-post-install-script.sh -O /opt/vm-post-install-script.sh"; \
-  in-target bash -c 'chmod +x /opt/vm-post-install-script.sh'; \
-  in-target bash -c '/opt/vm-post-install-script.sh'
+  in-target bash -c "wget {{ tftp_server }}/scripts/mnaio-post-install-script.sh -O /opt/mnaio-post-install-script.sh"; \
+  in-target bash -c 'chmod +x /opt/mnaio-post-install-script.sh'; \
+  in-target bash -c '/opt/mnaio-post-install-script.sh'
 # Finish
 
 # Reboot after the install is finished.

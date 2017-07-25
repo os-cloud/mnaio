@@ -30,3 +30,11 @@ mnaio_host_distro_packages:
   - virtinst
   - virt-manager
   - vlan
+
+mnaio_pxe_distro_packages:
+  - tftpd-hpa
+  - inetutils-inetd
+  - nginx
+  - p7zip-full
+
+mnaio_host_iptables_service: "{{ (ansible_distribution | lower + '-' + ansible_distribution_version | lower == 'ubuntu-14.04') | ternary('iptables-persistent', 'netfilter-persistent') }}"

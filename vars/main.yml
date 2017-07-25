@@ -1,5 +1,8 @@
 ---
+# Default options
 default_interface: eth0
+default_vm_image: ubuntu-16.04-amd64
+
 
 tftp_port: 69
 tftp_boot_dir: "/var/lib/tftpboot"
@@ -71,38 +74,38 @@ mnaio_host_iptables_rules:
     jump: ACCEPT
   - table: nat
     chain: POSTROUTING
-    source: "10.0.0.0/24"
-    destination: "!10.0.0.0/24"
-    jump: MASQUERADE
-  - table: nat
-    chain: POSTROUTING
     out_interface: "{{ default_interface }}"
     jump: MASQUERADE
-  - table: mangle
-    chain: POSTROUTING
-    source: "10.0.0.0/24"
-    out_interface: "br-dhcp"
-    protocol: udp
-    match: udp
-    destination_port: 68
-    jump: CHECKSUM
-  - table: mangle
-    chain: POSTROUTING
-    protocol: tcp
-    jump: CHECKSUM
-
 
 # Default ISO images
 images:
   ubuntu-16.04-amd64:
     image_type: debian
     image_iso_url: "http://releases.ubuntu.com/16.04.2/ubuntu-16.04.2-server-amd64.iso"
-    image_name: "{{ image_iso_url | basename }}"
-    image_short_name: "{{ image_name.split('.iso', -1)[0] }}"
-    image_default_boot: "{{ image_short_name }}/amd64/boot-screens/menu.cfg"
+    image_name: "ubuntu-16.04.2-server-amd64.iso"
+    image_short_name: "ubuntu-16.04.2-server-amd64"
+    image_default_boot: "ubuntu-16.04.2-server-amd64/amd64/boot-screens/menu.cfg"
     image_kernel_options: "biosdevname=0 net.ifnames=0 auto=true priority=critical vga=789"
-    image_kernel: "{{ image_short_name }}/amd64/linux"
-    image_initrd: "{{ image_short_name }}/amd64/initrd.gz"
+    image_kernel: "ubuntu-16.04.2-server-amd64/amd64/linux"
+    image_initrd: "ubuntu-16.04.2-server-amd64/amd64/initrd.gz"
+    image_netboot: ubuntu-16.04.2-server-amd64/install/netboot/ubuntu-installer
+    image_preseeds:
+      mnaio:
+        url: "tftp://{{ tftp_server }}/preseed/mnaio-preseed.cfg"
+        template_name: "mnaio.preseed"
+      vm:
+        url: "tftp://{{ tftp_server }}/preseed/vm-preseed.cfg"
+        template_name: "vm.preseed"
+  ubuntu-14.04-amd64:
+    image_type: debian
+    image_iso_url: "http://releases.ubuntu.com/14.04.5/ubuntu-14.04.5-server-amd64.iso"
+    image_name: "ubuntu-14.04.5-server-amd64.iso"
+    image_short_name: "ubuntu-14.04.5-server-amd64"
+    image_default_boot: "ubuntu-14.04.5-server-amd64/amd64/boot-screens/menu.cfg"
+    image_kernel_options: "biosdevname=0 net.ifnames=0 auto=true priority=critical vga=789"
+    image_kernel: "ubuntu-14.04.5-server-amd64/amd64/linux"
+    image_initrd: "ubuntu-14.04.5-server-amd64/amd64/initrd.gz"
+    image_netboot: ubuntu-16.04.2-server-amd64/install/netboot/ubuntu-installer
     image_preseeds:
       mnaio:
         url: "tftp://{{ tftp_server }}/preseed/mnaio-preseed.cfg"
@@ -111,12 +114,16 @@ images:
         url: "tftp://{{ tftp_server }}/preseed/vm-preseed.cfg"
         template_name: "vm.preseed"
 
+pxelinux_url: "https://www.kernel.org/pub/linux/utils/boot/syslinux/syslinux-6.03.tar.gz"
+pxelinux_name: "syslinux-6.03.tar.gz"
+pxelinux_short_name: "syslinux-6.03"
+
 # List of servers to create specific mac address bound boot entries.
 servers:
   - server_hostname: 'infra1'              # str  - required, hostname of server
     server_vm_ram: 4096                     # int  - not required, used to specify ram when provisioning a VM
     server_vm_vcpus: 4                      # int  - not required, used to specify vcpus when provisioning a VM
-    server_image: 'ubuntu-16.04-amd64'      # str  - required, image name
+    server_image: 'ubuntu-14.04-amd64'      # str  - required, image name
     server_default_interface: 'eth0'        # str  - required, default interface
     server_mac_address: '52:54:00:bd:80:00' # str  - required, mac address of default interface
     server_preseed_ks: 'vm'                 # str  - required, name of preseed/kickstart file
@@ -153,7 +160,7 @@ servers:
   - server_hostname: 'infra2'
     server_vm_ram: 4096
     server_vm_vcpus: 4
-    server_image: 'ubuntu-16.04-amd64'
+    server_image: 'ubuntu-14.04-amd64'
     server_default_interface: 'eth0'
     server_mac_address: '52:54:00:bd:80:01'
     server_preseed_ks: 'vm'
@@ -190,7 +197,7 @@ servers:
   - server_hostname: 'infra3'
     server_vm_ram: 4096
     server_vm_vcpus: 4
-    server_image: 'ubuntu-16.04-amd64'
+    server_image: 'ubuntu-14.04-amd64'
     server_default_interface: 'eth0'
     server_mac_address: '52:54:00:bd:80:02'
     server_preseed_ks: 'vm'
@@ -227,7 +234,7 @@ servers:
   - server_hostname: 'network1'
     server_vm_ram: 2048
     server_vm_vcpus: 1
-    server_image: 'ubuntu-16.04-amd64'
+    server_image: 'ubuntu-14.04-amd64'
     server_default_interface: 'eth0'
     server_mac_address: '52:54:00:bd:80:03'
     server_preseed_ks: 'vm'
@@ -264,7 +271,7 @@ servers:
   - server_hostname: 'network2'
     server_vm_ram: 2048
     server_vm_vcpus: 1
-    server_image: 'ubuntu-16.04-amd64'
+    server_image: 'ubuntu-14.04-amd64'
     server_default_interface: 'eth0'
     server_mac_address: '52:54:00:bd:80:04'
     server_preseed_ks: 'vm'
@@ -301,7 +308,7 @@ servers:
   - server_hostname: 'compute1'
     server_vm_ram: 2048
     server_vm_vcpus: 4
-    server_image: 'ubuntu-16.04-amd64'
+    server_image: 'ubuntu-14.04-amd64'
     server_default_interface: 'eth0'
     server_mac_address: '52:54:00:bd:80:05'
     server_preseed_ks: 'vm'
@@ -338,7 +345,7 @@ servers:
   - server_hostname: 'compute2'
     server_vm_ram: 2048
     server_vm_vcpus: 4
-    server_image: 'ubuntu-16.04-amd64'
+    server_image: 'ubuntu-14.04-amd64'
     server_default_interface: 'eth0'
     server_mac_address: '52:54:00:bd:80:06'
     server_preseed_ks: 'vm'
@@ -375,7 +382,7 @@ servers:
   - server_hostname: 'storage1'
     server_vm_ram: 2048
     server_vm_vcpus: 1
-    server_image: 'ubuntu-16.04-amd64'
+    server_image: 'ubuntu-14.04-amd64'
     server_default_interface: 'eth0'
     server_mac_address: '52:54:00:bd:80:07'
     server_preseed_ks: 'vm'
@@ -412,7 +419,7 @@ servers:
   - server_hostname: 'storage2'
     server_vm_ram: 2048
     server_vm_vcpus: 1
-    server_image: 'ubuntu-16.04-amd64'
+    server_image: 'ubuntu-14.04-amd64'
     server_default_interface: 'eth0'
     server_mac_address: '52:54:00:bd:80:08'
     server_preseed_ks: 'vm'
@@ -449,7 +456,7 @@ servers:
   - server_hostname: 'deploy1'
     server_vm_ram: 1024
     server_vm_vcpus: 2
-    server_image: 'ubuntu-16.04-amd64'
+    server_image: 'ubuntu-14.04-amd64'
     server_default_interface: 'eth0'
     server_mac_address: '52:54:00:bd:80:09'
     server_preseed_ks: 'vm'

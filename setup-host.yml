@@ -64,24 +64,24 @@
     # These rules are added manually due to bugs in the iptables module.
     - name: Add IPtables rules
       shell: |
-        if ! iptables -w -t {{ table }} -C {{ rule }};then
-          iptables -w -t {{ table }} -I {{ rule }}
+        if ! iptables -w -t {{ item.table }} -C {{ item.rule }};then
+          iptables -w -t {{ item.table }} -I {{ item.rule }}
         fi
       with_items:
         - table: 'nat'
           rule: 'POSTROUTING -s 10.0.0.0/24 ! -d 10.0.0.0/24 -j MASQUERADE'
         - table: 'mangle'
           rule: 'POSTROUTING -s 10.0.0.0/24 -o br-dhcp -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill'
-        - table: 'nat'
+        - table: 'mangle'
           rule: 'POSTROUTING -s 10.0.0.0/24 -o br-dhcp -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill'
 
     - name: Start netfilter persistent
       service:
-        name: netfilter-persistent
+        name: "{{ mnaio_host_iptables_service }}"
         state: started
         enabled: yes
       when:
-        - maas_use_api | bool
+        - ansible_distribution | lower == 'ubuntu'
 
   vars_files:
     - vars/main.yml
